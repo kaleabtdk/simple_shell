@@ -1,180 +1,111 @@
 #include "shell.h"
 
+int envars_builtins(char **commands);
+int other_set_buitlins(char **commands);
+
 /**
- * env - Prints the environment variables to stdout
+ * handle_builtins - Executes the builtin funtions in case the command is one
+ * @commands: User's input parsed as an array of commads
+ *
+ * Return: 1 if the command is a builtin, 0 otherwise
 */
-void env(void)
+int handle_builtins(char **commands)
 {
-	int i;
-	char **env = __environ;
+	if (commands[0] == NULL)
+		return (0);
 
-	for (i = 0; env[i]; i++)
-	{
-		write(STDOUT_FILENO, env[i], _strlen(env[i]));
-		write(STDOUT_FILENO, "\n", 1);
-	}
+	if (envars_builtins(commands))
+		return (1);
 
-	set_process_exit_code(0);
+	if (other_set_buitlins(commands))
+		return (1);
+
+	return (0);
 }
 
 /**
- * _setenv - Sets or adds an environment variable
- * @name: Name for the new env variable
- * @value: Value for the new env variable
+ * envars_builtins - Verifies if a command is a builtin
+ * @commands: Arrays of commnads
  *
- * Return: 1 on success, -1 on error
- */
-int _setenv(char *name, char *value)
+ * Return: 1 if command is a builtin, 0 otherwise
+*/
+int envars_builtins(char **commands)
 {
-	int env_index, new_var_len;
-
-	if (validate_env_name(name) == -1)
-		return (-1);
-
-	env_index = get_env_index(name);
-	if (env_index == -1)
-	{/* var doen't exist, SO CREATE IT */
-		int env_count = 0;
-		int old_size, new_size;
-
-		while (__environ[env_count] != NULL)
-			env_count++;
-
-		old_size = sizeof(char *) * (env_count);
-		new_size = sizeof(char *) * (env_count + 2);
-		__environ = _realloc(__environ, old_size, new_size);
-		if (__environ == NULL)
-			dispatch_error("Error while _reallocating memory for new env var");
-
-		/* The new value will be stored at index env_count */
-		env_index = env_count;
-		/* last value For the new env var needs to be NULL */
-		__environ[env_count + 1] = NULL;
-	}
-	else
+	if (_strcmp(commands[0], "env") == 0)
 	{
-		/* var exists, so overwrite it's value */
-		free(__environ[env_index]);
-	}
+		if (commands[1] != NULL)
+			return (0);
 
-	new_var_len = _strlen(name) + _strlen(value) + 2;
-	/* store the env var either if it exists or it needs to be overwritten */
-	__environ[env_index] = allocate_memory(sizeof(char) * new_var_len);
-	_strcpy(__environ[env_index], name);
-	_strcat(__environ[env_index], "=");
-	_strcat(__environ[env_index], value);
-
-	set_process_exit_code(0);
-	return (1);
-}
-
-/**
- * _unsetenv - Removes an evironment variable
- * @name: Name for the new env variable
- *
- * Return: 1 on success, -1 on error
- */
-int _unsetenv(char *name)
-{
-	int env_index, i;
-
-	env_index = get_env_index(name);
-	if (env_index >= 0)
-	{/* var exists, We can unset it */
-		free(__environ[env_index]);
-
-		for (i = env_index; __environ[i] != NULL; i++)
-			__environ[i] = __environ[i + 1];
-
-		set_process_exit_code(0);
+		env();
 		return (1);
 	}
 
-	/* Var doesn't exist, we can print error or do nothing */
-	set_process_exit_code(0); /* Indicates that no error ocurred */
+	if (_strcmp(commands[0], "setenv") == 0)
+	{
+		if (commands[1] == NULL || commands[2] == NULL || commands[3] != NULL)
+			return (1);
 
-	return (1);
+		_setenv(commands[1], commands[2]);
+		return (1);
+	}
+
+	if (_strcmp(commands[0], "unsetenv") == 0)
+	{
+		if (commands[1] == NULL || commands[2] != NULL)
+			return (1);
+
+		_unsetenv(commands[1]);
+		return (1);
+	}
+
+	return (0);
 }
 
 /**
- * _cd - Changes the current directory of the process
- * @path: Path to wich change the working directory
+ * other_set_buitlins - Verifies if a command is a builtin
+ * @commands: Arrays of commnads
  *
- * Return: 1 on success, -1 on error
+ * Return: 1 if command is a builtin, 0 otherwise
 */
-int _cd(char *path)
+int other_set_buitlins(char **commands)
 {
-	char buff[1024];
-	char *oldpwd;
-	char *_path = path;
-
-	if (_strcmp(path, "-") == 0)
-		path = _getenv("OLDPWD");
-
-	if (path == NULL)
+	if (_strcmp(commands[0], "cd") == 0)
 	{
-		print_builtin_error("cd: OLDPWD not set", "");
-		return (-1);
-	}
-	/* Needed to avoid reading on freed memory */
-	path = duplicate_string(path);
-	/* store this dir in case of update */
-	oldpwd = getcwd(buff, 1024);
-	if (oldpwd == NULL)
-	{
-		free(path);
-		print_builtin_error("cd: couldn't get current dir", "");
-		return (-1);
-	}
-	/* Try to change the current dir */
-	if (chdir(path) == -1)
-	{
-		free(path);
-		print_builtin_error("cd: can't change cd to ", _path);
-		set_process_exit_code(1);
-		return (-1);
-	}
-	/* Update env variables */
-	_setenv("OLDPWD", oldpwd);
-	_setenv("PWD", path);
-	free(path);
-	set_process_exit_code(0);
-	return (1);
-}
+		char *path = commands[1];
 
-/**
- * _alias - Sets an alias command
- * @commands: List of commands
- *
- * Return: -1 on error, 0 otherwise
-*/
-int _alias(char **commands)
-{
-	int status = 0;
-	list_t *curr;
-	list_t *out_head = NULL;
-	list_t **alias_addrs = get_alias_head();
+		if (commands[1] == NULL)
+			path = _getenv("HOME");
 
-	/* the alias args starts from position 1 */
-	if (commands[1] == NULL)
-	{ /* This means to list all the aliases */
-		for (curr = *alias_addrs; curr != NULL; curr = curr->next)
+		if (path == NULL)
+			path = "/";
+
+		_cd(path);
+		return (1);
+	}
+
+	if (_strcmp(commands[0], "alias") == 0)
+	{
+		_alias(commands);
+		return (1);
+	}
+
+	if (_strcmp(commands[0], "help") == 0)
+	{
+		_help(commands);
+		return (1);
+	}
+
+	if (_strcmp(commands[0], "history") == 0)
+	{
+		if (commands[1] != NULL)
 		{
-			_puts(curr->str);
-			_puts("\n");
+			print_builtin_error("history: No args allowed", "");
+			return (1);
 		}
-		set_process_exit_code(0);
-		return (1);
+
+		/*_history();*/
+		/*return (1);*/
 	}
-	/* List aliases and sets the aliases that have the form name=value */
-	status = handle_alias_args(commands, &out_head);
-	/* print listed alias */
-	for (curr = out_head; curr != NULL; curr = curr->next)
-	{
-		_puts(curr->str);
-		_puts("\n");
-	}
-	/* free list */
-	free_list(out_head);
-	return (status);
+
+	return (0);
 }
